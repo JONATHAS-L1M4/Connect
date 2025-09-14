@@ -8,8 +8,6 @@ services:
       --proxy-headers
       --forwarded-allow-ips="*"
     env_file: .env
-    ports:
-      - "80:80"
     restart: always
 
   scanner:
