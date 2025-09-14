@@ -1,0 +1,32 @@
+{
+  "services": [
+    {
+      "type": "compose",
+      "data": {
+        "projectName": "ebettr",
+        "serviceName": "connect",
+        "source": {
+          "type": "git",
+          "repo": "https://github.com/JONATHAS-L1M4/Connect",
+          "ref": "main",
+          "rootPath": "/",
+          "composeFile": "docker-compose.yml"
+        },
+        "env": "BASE_URL=***\r\nEVOLUTION_DOMAIN=***\r\nEVOLUTION_GLOBAL_KEY=***\r\nEVOLUTION_INSTANCE_NAME_ADMIN=***\r\nEVOLUTION_INSTANCE_KEY_ADMIN=***\r\nREDIS_URL=***",
+        "domains": [
+          {
+            "host": "app.ebettr.com",
+            "https": true,
+            "port": 80,
+            "service": "app",
+            "path": "/",
+            "middlewares": [],
+            "certificateResolver": "",
+            "wildcard": false,
+            "internalProtocol": "http"
+          }
+        ]
+      }
+    }
+  ]
+}
