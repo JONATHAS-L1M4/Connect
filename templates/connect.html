@@ -1,0 +1,374 @@
+<!doctype html>
+<html lang="pt-br">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Evolution Instance Manager</title>
+
+  <!-- Favicon -->
+   
+  <link rel="icon" type="image/png" sizes="32x32" href="{{ url_for('static', path='/img/favicon.png') }}">
+  <link rel="icon" type="image/png" sizes="16x16" href="{{ url_for('static', path='/img/favicon.png') }}">
+  <!-- (Opcional) Apple Touch (se o mesmo png servir) -->
+  <link rel="apple-touch-icon" href="{{ url_for('static', path='/img/favicon.png') }}">
+  <!-- (Compatibilidade) shortcut icon -->
+  <link rel="shortcut icon" href="{{ url_for('static', path='/img/favicon.png') }}">
+  <meta name="theme-color" content="#10b981">
+
+  <!-- Open Graph (WhatsApp / Facebook / LinkedIn) -->
+  <link rel="canonical" href="{{ request.url if request else '' }}">
+  <meta property="og:type" content="website">
+  <meta property="og:locale" content="pt_BR">
+  <meta property="og:site_name" content="Evolution Instance Manager">
+  <meta property="og:title" content="Evolution Instance Manager">
+  <meta property="og:description" content="Conexão com WhatsApp via QR Code.">
+  <meta property="og:url" content="{{ request.url if request else '' }}">
+  <!-- Use URL ABSOLUTA; com 'request' no contexto, request.url_for gera absoluta -->
+  <meta property="og:image" content="{{ request.url_for('static', path='/img/thumbnail.jpg') }}?v=2">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+
+  <!-- (Opcional) Twitter Card -->
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="Evolution Instance Manager">
+  <meta name="twitter:description" content="Conexão com WhatsApp via QR Code.">
+  <meta name="twitter:image" content="{{ request.url_for('static', path='/img/thumbnail.jpg') if request else url_for('static', path='/img/thumbnail.jpg') }}">
+
+  <script src="https://cdn.tailwindcss.com"></script>
+  <meta name="robots" content="noindex,nofollow" />
+  <script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.3/build/qrcode.min.js"></script>
+
+  <!-- Estilo sutil + animações (sem moldura/linha verde no QR) -->
+  <style>
+    /* Animações discretas */
+    @keyframes fade-up { 0%{opacity:0;transform:translateY(6px)} 100%{opacity:1;transform:translateY(0)} }
+    .animate-fade-up { animation: fade-up .35s ease both; }
+
+    @keyframes shimmer {
+      0% { background-position: -200% 0; }
+      100% { background-position: 200% 0; }
+    }
+    .animate-shimmer {
+      background: linear-gradient(90deg,#f3f4f6 0%,#e5e7eb 20%,#f3f4f6 40%);
+      background-size: 200% 100%;
+      animation: shimmer 1.25s linear infinite;
+    }
+
+    @keyframes pop { 0%{transform:scale(.96);opacity:0} 100%{transform:scale(1);opacity:1} }
+    .animate-pop { animation: pop .22s ease-out both; }
+
+    /* Bolinha de status no #status (não altera o conteúdo) */
+    #status::before {
+      content:"";
+      display:inline-block;
+      width:10px;height:10px;border-radius:9999px;margin-right:8px;vertical-align:middle;
+      background:#f59e0b; box-shadow:0 0 0 3px rgba(251,191,36,.35);
+    }
+    #status[data-state="connected"]::before { background:#10b981; box-shadow:0 0 0 3px rgba(16,185,129,.30); }
+    #status[data-state="error"]::before { background:#ef4444; box-shadow:0 0 0 3px rgba(239,68,68,.25); }
+    #status[data-state="idle"]::before { background:#9ca3af; box-shadow:0 0 0 3px rgba(156,163,175,.25); }
+
+    /* Acessibilidade */
+    @media (prefers-reduced-motion: reduce) {
+      .animate-fade-up, .animate-shimmer, .animate-pop { animation: none !important; }
+    }
+  </style>
+</head>
+<body class="relative min-h-screen bg-gray-50">
+  <!-- Fundo com imagem + desfoque (igual ao original) -->
+  <div class="fixed inset-0 -z-10">
+    <img src="{{ url_for('static', path='/img/background.jpg') }}"
+         alt=""
+         class="w-full h-full object-cover blur-xl scale-110">
+    <div class="absolute inset-0 bg-black/40"></div>
+  </div>
+
+  <div class="min-h-screen flex items-center justify-center px-4">
+    <div class="w-full max-w-4xl bg-white/90 backdrop-blur-sm p-6 sm:p-8 rounded-xl shadow animate-fade-up">
+      <h1 class="text-2xl font-semibold text-center mb-1">Evolution Instance Manager</h1>
+      <p class="text-center text-sm text-gray-600 mb-6">Conexão com WhatsApp via QR Code</p>
+
+      <!-- Card em 2 colunas (status/instruções à esquerda e QR à direita) -->
+      <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 items-start">
+        <!-- Coluna esquerda -->
+        <section class="rounded-lg border border-gray-200/70 bg-white/70 backdrop-blur p-4 sm:p-5">
+          <!-- STATUS (essencial para não quebrar o JS) -->
+          <div id="status" class="text-sm mb-3 text-gray-800" data-state="idle">Carregando…</div>
+
+          <!-- Área de alerts (debug #debug) -->
+          <div id="alerts" class="space-y-2"></div>
+
+          <div id="instructions" class="mt-4 text-sm text-gray-800 hidden">
+            <p class="mb-1">Escaneie o QR Code ao lado com seu WhatsApp.</p>
+            <p class="text-gray-600">No app do WhatsApp, acesse <strong>Configurações &gt; Dispositivos conectados</strong> e escaneie o QR.</p>
+          </div>
+
+          <div id="connectedBox" class="hidden">
+            <!-- alterado: sem emoji e outra frase -->
+            <p class="text-sm text-gray-600">Pronto! Seu WhatsApp está conectado.</p>
+            <div class="mt-4 flex items-start gap-4">
+              <!-- Skeleton (novo) + foto original -->
+              <div id="profileSkeleton" class="h-24 w-24 rounded-lg bg-gray-200 animate-shimmer"></div>
+
+              <img id="profileImg" alt="Foto de perfil"
+                   class="h-24 w-24 rounded-lg object-cover bg-black/10 hidden" />
+              <div class="text-sm">
+                <div class="text-gray-800 font-medium">Perfil do Usuário</div>
+                <div class="mt-1 space-y-0.5">
+                  <div><span class="text-gray-600">Nome:</span> <code id="profileName" class="text-gray-800">—</code></div>
+                  <!-- removido o botão de copiar -->
+                  <div><span class="text-gray-600">Número:</span> <code id="profileNumber" class="text-gray-800">—</code></div>
+                  <div><span class="text-gray-600">Status:</span> <code class="text-emerald-600">Conectado</code></div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <p class="mt-6 text-xs text-gray-500">O painel atualiza automaticamente a cada 5 segundos.</p>
+        </section>
+
+        <!-- Coluna direita: QR (sem moldura/linha verde) -->
+        <section class="rounded-lg border border-gray-200/70 bg-white/70 backdrop-blur p-4 sm:p-5 flex flex-col items-center justify-center">
+          <div class="text-sm text-gray-700 mb-2">QR Code para Conexão</div>
+
+          <canvas id="qrcanvas"
+                  class="w-[320px] h-[320px] sm:w-[360px] sm:h-[360px] max-w-full max-h-[60vh] rounded-md bg-white shadow-inner"></canvas>
+          <!-- fallback server-side -->
+          <img id="qrimg"
+               class="hidden w-[320px] h-[320px] sm:w-[360px] sm:h-[360px] max-w-full max-h-[60vh] rounded-md bg-white shadow-inner"
+               alt="QR Fallback" />
+        </section>
+      </div>
+
+      <noscript>
+        <p class="mt-4 text-xs text-gray-600">
+          Observação: o JavaScript melhora a experiência (atualiza o QR automaticamente).
+        </p>
+      </noscript>
+    </div>
+  </div>
+
+  <!-- Toasts -->
+  <div id="toastRoot" class="fixed bottom-4 left-1/2 -translate-x-1/2 z-50 space-y-2"></div>
+
+  <script>
+    const token = "{{ token }}";
+    const localStatusURL = "/api/qr-status";
+    const localProfileURL = "/api/profile";
+    const localProfilePhotoURL = "/api/profile-photo";
+    const debugOn = (location.hash || "").includes("debug");
+
+    const statusEl = document.getElementById('status');
+    const alertsEl = document.getElementById('alerts');
+    const instrEl = document.getElementById('instructions');
+    const connectedBoxEl = document.getElementById('connectedBox');
+    const canvas = document.getElementById('qrcanvas');
+    const qrImg = document.getElementById('qrimg');
+
+    const profileImg = document.getElementById('profileImg');
+    const profileName = document.getElementById('profileName');
+    const profileNumber = document.getElementById('profileNumber');
+    const profileSkeleton = document.getElementById('profileSkeleton');
+
+    const toastRoot = document.getElementById('toastRoot');
+
+    let lastQRValue = null;
+    let lastQRFormat = null; // 'text' | 'image'
+    let connectedOnce = false;
+
+    function toast(text, kind='ok') {
+      const base = kind==='err' ? 'bg-red-600'
+                 : kind==='warn'? 'bg-emerald-600'
+                 :                 'bg-emerald-600';
+      const el = document.createElement('div');
+      el.className = `text-white ${base} px-4 py-2 rounded shadow`;;
+      el.textContent = text;
+      toastRoot.appendChild(el);
+      setTimeout(()=>{ el.remove(); }, 2400);
+    }
+
+    function showAlert(kind, text) {
+      if (!debugOn) return;
+      const el = document.createElement('div');
+      const color = kind === 'warn' ? 'border-amber-200 bg-amber-50 text-amber-800'
+                  : kind === 'ok' ? 'border-emerald-200 bg-emerald-50 text-emerald-800'
+                  : 'border-red-200 bg-red-50 text-red-800';
+      el.className = `text-xs rounded-lg border px-3 py-2 ${color}`;
+      el.textContent = text;
+      alertsEl.appendChild(el);
+      setTimeout(() => { el.remove(); }, 8000);
+    }
+
+    function drawText(msg) {
+      const ctx = canvas.getContext('2d');
+      const W = canvas.width, H = canvas.height;
+      ctx.clearRect(0,0,W,H);
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(0,0,W,H);
+      ctx.fillStyle = '#059669';
+      ctx.font = 'bold 24px system-ui, -apple-system, Segoe UI, Roboto, sans-serif';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(msg, W/2, H/2);
+    }
+
+    function isLikelyBase64Image(val) {
+      if (!val || typeof val !== 'string') return false;
+      if (val.startsWith('data:image/')) return true;
+      return val.length > 100 && /^[A-Za-z0-9+/=]+$/.test(val) && val.startsWith('iVBOR');
+    }
+
+    async function fetchJSON(url) {
+      const sep = url.includes('?') ? '&' : '?';
+      const full = `${url}${sep}t=${encodeURIComponent(token)}&_=${Date.now()}`;
+      const res = await fetch(full, { cache: 'no-store', credentials: 'omit' });
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      return res.json();
+    }
+
+    async function loadProfile() {
+      try {
+        profileSkeleton?.classList.remove('hidden');
+        const data = await fetchJSON(localProfileURL);
+        if (debugOn) console.log('[profile]', data);
+        if (data && data.ok) {
+          const p = data.profile || {};
+          profileName.textContent = p.profileName || p.name || '—';
+          profileNumber.textContent = p.number || '—';
+          if (p.hasPhoto) {
+            profileImg.src = `${localProfilePhotoURL}?t=${encodeURIComponent(token)}&_=${Date.now()}`;
+            profileImg.onload = () => {
+              profileSkeleton?.classList.add('hidden');
+              profileImg.classList.remove('hidden');
+              profileImg.classList.add('animate-pop');
+            };
+          } else {
+            profileSkeleton?.classList.add('hidden');
+            profileImg.classList.add('hidden');
+          }
+        } else {
+          profileSkeleton?.classList.add('hidden');
+        }
+      } catch (e) {
+        profileSkeleton?.classList.add('hidden');
+        if (debugOn) console.warn('loadProfile error', e);
+      }
+    }
+
+    function showCanvas() {
+      canvas.classList.remove('hidden');
+      qrImg.classList.add('hidden');
+    }
+    function showImg() {
+      qrImg.classList.remove('hidden');
+      canvas.classList.add('hidden');
+    }
+
+    function drawQrText(text) {
+      try {
+        const cleaned = String(text || '').trim();
+        if (!cleaned) throw new Error('QR vazio');
+
+        QRCode.toCanvas(
+          canvas,
+          cleaned,
+          { width: 360, margin: 1, errorCorrectionLevel: 'L' },
+          (err) => {
+            if (err) {
+              if (debugOn) console.warn('toCanvas error, usando fallback PNG:', err);
+              qrImg.src = `/api/qr-png?t=${encodeURIComponent(token)}&_=${Date.now()}`;
+              showImg();
+            } else {
+              showCanvas();
+            }
+          }
+        );
+      } catch (e) {
+        if (debugOn) console.warn('drawQrText catch, usando fallback PNG:', e);
+        qrImg.src = `/api/qr-png?t=${encodeURIComponent(token)}&_=${Date.now()}`;
+        showImg();
+      }
+    }
+
+    function drawQrImage(b64) {
+      const ctx = canvas.getContext('2d');
+      const img = new Image();
+      img.onload = () => {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+        showCanvas();
+      };
+      img.onerror = () => {
+        if (debugOn) console.warn('img base64 error, usando fallback PNG');
+        qrImg.src = `/api/qr-png?t=${encodeURIComponent(token)}&_=${Date.now()}`;
+        showImg();
+      };
+      img.src = b64.startsWith('data:image/') ? b64 : ('data:image/png;base64,' + b64);
+    }
+
+    // Atualiza a bolinha do #status
+    function setStatusState(state) {
+      if (statusEl) statusEl.setAttribute('data-state', state);
+    }
+
+    async function tick() {
+      try {
+        const data = await fetchJSON(localStatusURL);
+        if (debugOn) console.log('[qr-status]', data);
+        const st = (data && data.status) || 'unknown';
+        const qr = (data && data.qrcode ? String(data.qrcode).trim() : "");
+        const fmt = data && data.qr_format; // 'text' | 'image' ou undefined
+
+        if (st === 'qr_code') {
+          instrEl?.classList.remove('hidden');
+          connectedBoxEl?.classList.add('hidden');
+          setStatusState('idle');
+          if (statusEl) statusEl.textContent = 'Escaneie o QR com seu WhatsApp';
+
+          if (qr && (qr !== lastQRValue || fmt !== lastQRFormat)) {
+            lastQRValue = qr;
+            lastQRFormat = fmt || (isLikelyBase64Image(qr) ? 'image' : 'text');
+            if (lastQRFormat === 'image' || isLikelyBase64Image(qr)) {
+              drawQrImage(qr);
+            } else {
+              drawQrText(qr);
+            }
+          }
+        } else if (st === 'connected') {
+          instrEl?.classList.add('hidden');
+          if (statusEl) statusEl.innerHTML = '<span class="text-emerald-700 font-semibold">Dispositivo conectado</span>';
+          setStatusState('connected');
+          drawText('Conectado ✔');
+          if (connectedBoxEl) connectedBoxEl.classList.remove('hidden');
+          if (!connectedOnce) {
+            connectedOnce = true;
+            await loadProfile();
+            toast('Conectado com sucesso!');
+          }
+        } else if (st === 'error') {
+          if (statusEl) statusEl.innerHTML = '<span class="text-amber-700">Erro ao obter status</span>';
+          setStatusState('error');
+        } else if (st === 'invalid') {
+          if (statusEl) statusEl.innerHTML = '<span class="text-red-700">Link inválido ou expirado</span>';
+          setStatusState('error');
+          drawText('Link inválido');
+        } else {
+          if (statusEl) statusEl.textContent = 'Aguardando QR Code…';
+          setStatusState('idle');
+        }
+      } catch (e) {
+        if (debugOn) console.warn('tick error', e);
+        if (statusEl) statusEl.innerHTML = '<span class="text-amber-700">Falha de rede</span>';
+        setStatusState('error');
+      }
+    }
+
+    // Tamanho lógico do canvas
+    canvas.width = 360; canvas.height = 360;
+
+    // Kickoff + polling
+    tick();
+    setInterval(tick, 5000);
+  </script>
+</body>
+</html>

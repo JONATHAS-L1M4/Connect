@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="pt-br">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Link inválido</title>
+
+  <!-- Importante: crawlers do WhatsApp/FB não executam JS -->
+  <meta name="robots" content="noindex,nofollow" />
+  <link rel="canonical" href="{{ request.url }}">
+
+  <!-- Favicon -->
+  <link rel="icon" type="image/png" sizes="32x32" href="{{ url_for('static', path='/img/favicon.png') }}">
+  <link rel="icon" type="image/png" sizes="16x16" href="{{ url_for('static', path='/img/favicon.png') }}">
+  <!-- (Opcional) Apple Touch (se o mesmo png servir) -->
+  <link rel="apple-touch-icon" href="{{ url_for('static', path='/img/favicon.png') }}">
+  <!-- (Compatibilidade) shortcut icon -->
+  <link rel="shortcut icon" href="{{ url_for('static', path='/img/favicon.png') }}">
+
+  <!-- Open Graph (WhatsApp / Facebook / LinkedIn) -->
+  <meta property="og:type" content="website">
+  <meta property="og:locale" content="pt_BR">
+  <meta property="og:site_name" content="Evolution Instance Manager">
+  <meta property="og:title" content="Link inválido ou expirado">
+  <meta property="og:description" content="Acesse somente via link temporário válido.">
+  <meta property="og:url" content="{{ request.url }}">
+  <!-- Use URL ABSOLUTA; request.url_for gera absoluta no FastAPI/Starlette -->
+  <meta property="og:image" content="{{ request.url_for('static', path='/img/thumbnail.jpg') }}?v=2">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+
+  <!-- (Opcional) Twitter Card - não atrapalha o WhatsApp -->
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="Link inválido ou expirado">
+  <meta name="twitter:description" content="Acesse somente via link temporário válido.">
+  <meta name="twitter:image" content="{{ request.url_for('static', path='/img/thumbnail.jpg') }}">
+
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="relative min-h-screen bg-gray-50">
+  <!-- Fundo com imagem + desfoque (servida localmente) -->
+  <div class="fixed inset-0 -z-10">
+    <img src="{{ url_for('static', path='/img/background.jpg') }}"
+         alt=""
+         class="w-full h-full object-cover blur-xl scale-110">
+    <div class="absolute inset-0 bg-black/40"></div>
+  </div>
+
+  <div class="min-h-screen grid place-items-center px-4">
+    <div class="w-full max-w-md bg-white/90 backdrop-blur-sm p-8 rounded-xl shadow text-center">
+      <div class="text-5xl mb-4">🙁</div>
+      <h1 class="text-2xl font-semibold mb-2">Link inválido ou expirado</h1>
+      <p class="text-sm text-gray-600">Acesse somente via link temporário válido.</p>
+    </div>
+  </div>
+</body>
+</html>
