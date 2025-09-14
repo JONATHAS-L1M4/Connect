@@ -1,0 +1,13 @@
+fastapi
+uvicorn[standard]
+redis>=5
+requests
+python-dotenv
+pyotp
+pydantic
+starlette
+qrcode
+Pillow
+itsdangerous>=2.1
+python-multipart>=0.0.9
+jinja2
